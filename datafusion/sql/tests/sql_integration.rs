@@ -3181,6 +3181,56 @@ fn join_on_complex_condition() {
 }
 
 #[test]
+fn lateral_comma_join() {
+    let sql = "SELECT j1_string, j2_string FROM
+            j1, \
+            LATERAL (SELECT * FROM j2 WHERE j1_id < j2_id) AS j2";
+    let expected = "Projection: j1.j1_string, j2.j2_string\
+            \n  CrossJoin:\
+            \n    TableScan: j1\
+            \n    SubqueryAlias: j2\
+            \n      Subquery:\
+            \n        Projection: j2.j2_id, j2.j2_string\
+            \n          Filter: outer_ref(j1.j1_id) < j2.j2_id\
+            \n            TableScan: j2";
+    quick_test(sql, expected);
+}
+
+#[test]
+fn lateral_left_join() {
+    let sql = "SELECT j1_string, j2_string FROM 
+            j1 \
+            LEFT JOIN LATERAL (SELECT * FROM j2 WHERE j1_id < j2_id) AS j2 ON(true);";
+    let expected = "Projection: j1.j1_string, j2.j2_string\
+            \n  Left Join:  Filter: Boolean(true)\
+            \n    TableScan: j1\
+            \n    SubqueryAlias: j2\
+            \n      Subquery:\
+            \n        Projection: j2.j2_id, j2.j2_string\
+            \n          Filter: outer_ref(j1.j1_id) < j2.j2_id\
+            \n            TableScan: j2";
+    quick_test(sql, expected);
+}
+
+#[test]
+fn lateral_nested_left_join() {
+    let sql = "SELECT * FROM 
+            j1, \
+            (j2 LEFT JOIN LATERAL (SELECT * FROM j3 WHERE j1_id + j2_id = j3_id) AS j3 ON(true))";
+    let expected = "Projection: j1.j1_id, j1.j1_string, j2.j2_id, j2.j2_string, j3.j3_id, j3.j3_string\
+            \n  CrossJoin:\
+            \n    TableScan: j1\
+            \n    Left Join:  Filter: Boolean(true)\
+            \n      TableScan: j2\
+            \n      SubqueryAlias: j3\
+            \n        Subquery:\
+            \n          Projection: j3.j3_id, j3.j3_string\
+            \n            Filter: outer_ref(j1.j1_id) + outer_ref(j2.j2_id) = j3.j3_id\
+            \n              TableScan: j3";
+    quick_test(sql, expected);
+}
+
+#[test]
 fn hive_aggregate_with_filter() -> Result<()> {
     let dialect = &HiveDialect {};
     let sql = "SELECT SUM(age) FILTER (WHERE age > 4) FROM person";

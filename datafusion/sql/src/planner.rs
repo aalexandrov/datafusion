@@ -17,12 +17,13 @@
 
 //! [`SqlToRel`]: SQL Query Planner (produces [`LogicalPlan`] from SQL AST)
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::vec;
 
 use arrow_schema::*;
 use datafusion_common::{
-    field_not_found, internal_err, plan_datafusion_err, SchemaError,
+    field_not_found, internal_err, plan_datafusion_err, DFSchemaRef, SchemaError,
 };
 use datafusion_expr::WindowUDF;
 use sqlparser::ast::TimezoneInfo;
@@ -149,6 +150,9 @@ pub struct PlannerContext {
     ctes: HashMap<String, Arc<LogicalPlan>>,
     /// The query schema of the outer query plan, used to resolve the columns in subquery
     outer_query_schema: Option<DFSchema>,
+    /// The joined schemas of all FROM clauses planned so far. When planning LATERAL
+    /// FROM clauses, this should become a suffix of the `outer_query_schema`.
+    outer_from_schema: Option<DFSchema>,
 }
 
 impl Default for PlannerContext {
@@ -164,6 +168,7 @@ impl PlannerContext {
             prepare_param_data_types: vec![],
             ctes: HashMap::new(),
             outer_query_schema: None,
+            outer_from_schema: None,
         }
     }
 
@@ -189,6 +194,25 @@ impl PlannerContext {
     ) -> Option<DFSchema> {
         std::mem::swap(&mut self.outer_query_schema, &mut schema);
         schema
+    }
+
+    /// sets the FROM schema, returning the existing one, if
+    /// any
+    pub fn set_outer_from_schema(
+        &mut self,
+        mut schema: Option<DFSchema>,
+    ) -> Option<DFSchema> {
+        std::mem::swap(&mut self.outer_from_schema, &mut schema);
+        schema
+    }
+
+    /// extends the FROM schema, returning the existing one, if any
+    pub fn extend_outer_from_schema(&mut self, schema: &DFSchemaRef) -> Result<()> {
+        self.outer_from_schema = match self.outer_from_schema.as_ref() {
+            Some(from_schema) => Some(from_schema.join(schema)?),
+            None => Some(schema.deref().clone()),
+        };
+        Ok(())
     }
 
     /// Return the types of parameters (`$1`, `$2`, etc) if known
