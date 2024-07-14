@@ -35,6 +35,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         relation: TableFactor,
         planner_context: &mut PlannerContext,
     ) -> Result<LogicalPlan> {
+        let _dbg = relation.to_string();
         let (plan, alias) = match relation {
             TableFactor::Table {
                 name, alias, args, ..
@@ -180,6 +181,11 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             }
             None => Some(Arc::clone(&old_from_schema)),
         };
+
+        let _x = format!("{:#?}", planner_context.outer_query_schema());
+        let _y = format!("{:#?}", old_from_schema);
+        let _z = format!("{:#?}", new_query_schema);
+
         let old_query_schema = planner_context.set_outer_query_schema(new_query_schema);
 
         let plan = self.create_relation(subquery, planner_context)?;

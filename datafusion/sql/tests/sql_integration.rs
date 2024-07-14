@@ -3211,6 +3211,26 @@ fn lateral_nested_left_join() {
     quick_test(sql, expected);
 }
 
+#[ignore = "Waiting for https://github.com/apache/datafusion/issues/11464"]
+#[test]
+fn df_schema_check() {
+    use arrow_schema::{DataType, Field};
+    use datafusion_common::DFSchema;
+    use datafusion_sql::TableReference;
+    use std::sync::Arc;
+
+    let t = || TableReference::bare("t");
+    let schema = DFSchema::new_with_metadata(
+        vec![
+            (Some(t()), Arc::new(Field::new("a", DataType::Int64, true))),
+            (Some(t()), Arc::new(Field::new("a", DataType::Utf8, false))),
+        ],
+        Default::default(),
+    );
+
+    schema.expect_err("duplicate t.a columns");
+}
+
 #[test]
 fn hive_aggregate_with_filter() -> Result<()> {
     let dialect = &HiveDialect {};
